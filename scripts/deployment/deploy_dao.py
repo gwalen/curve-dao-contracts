@@ -8,11 +8,16 @@ from brownie import (
     Minter,
     PoolProxy,
     VotingEscrow,
+    FeeDistributor,
     accounts,
     history,
 )
 
 from . import deployment_config as config
+
+# added to make test deployment easier 
+# ADMIN = accounts[0] # local test network
+ADMIN = accounts.load("gw_test_acc") # etherum testnet
 
 # TODO set weights!
 
@@ -23,28 +28,29 @@ GAUGE_TYPES = [
 
 # lp token, gauge weight
 POOL_TOKENS = {
-    "Compound": ("0x845838DF265Dcd2c412A1Dc9e959c7d08537f8a2", 12),
-    "USDT": ("0x9fC689CCaDa600B6DF723D9E47D84d76664a1F23", 0),
-    "Y": ("0xdF5e0e81Dff6FAF3A7e52BA697820c5e32D806A8", 1446),
-    "bUSD": ("0x3B3Ac5386837Dc563660FB6a0937DFAa5924333B", 2),
-    "PAX": ("0xD905e2eaeBe188fc92179b6350807D8bd91Db0D8", 1),
-    "RenBTC": ("0x49849C98ae39Fff122806C06791Fa73784FB3675", 26),
+    # "Compound": ("0x845838DF265Dcd2c412A1Dc9e959c7d08537f8a2", 12),
+    # "USDT": ("0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0", 0) # local test network
+    "USDT": ("0x9BcB3F98236eE1eFB9455637Fa69E2BE27963725", 0)   # rinkeby
+    # "Y": ("0xdF5e0e81Dff6FAF3A7e52BA697820c5e32D806A8", 1446),
+    # "bUSD": ("0x3B3Ac5386837Dc563660FB6a0937DFAa5924333B", 2),
+    # "PAX": ("0xD905e2eaeBe188fc92179b6350807D8bd91Db0D8", 1),
+    # "RenBTC": ("0x49849C98ae39Fff122806C06791Fa73784FB3675", 26),
 }
 
 # lp token, reward contract, reward token, gauge weight
 REWARD_POOL_TOKENS = {
-    "sUSD": (
-        "0xC25a3A3b969415c80451098fa907EC722572917F",
-        "0xDCB6A51eA3CA5d3Fd898Fd6564757c7aAeC3ca92",  # Synthetix LP Rewards: sUSD
-        "0xC011a73ee8576Fb46F5E1c5751cA3B9Fe0af2a6F",  # SNX
-        472,
-    ),
-    "sBTC": (
-        "0x075b1bb99792c9E1041bA13afEf80C91a1e70fB3",
-        "0x13C1542A468319688B89E323fe9A3Be3A90EBb27",  # Synthetix LP Rewards: sBTC
-        "0x330416C863f2acCE7aF9C9314B422d24c672534a",  # BPT[SNX/REN]
-        417,
-    ),
+    # "sUSD": (
+    #     "0xC25a3A3b969415c80451098fa907EC722572917F",
+    #     "0xDCB6A51eA3CA5d3Fd898Fd6564757c7aAeC3ca92",  # Synthetix LP Rewards: sUSD
+    #     "0xC011a73ee8576Fb46F5E1c5751cA3B9Fe0af2a6F",  # SNX
+    #     472,
+    # ),
+    # "sBTC": (
+    #     "0x075b1bb99792c9E1041bA13afEf80C91a1e70fB3",
+    #     "0x13C1542A468319688B89E323fe9A3Be3A90EBb27",  # Synthetix LP Rewards: sBTC
+    #     "0x330416C863f2acCE7aF9C9314B422d24c672534a",  # BPT[SNX/REN]
+    #     417,
+    # ),
 }
 
 
@@ -66,8 +72,8 @@ def live_part_two():
 
 
 def development():
-    token, voting_escrow = deploy_part_one(accounts[0])
-    deploy_part_two(accounts[0], token, voting_escrow)
+    token, voting_escrow = deploy_part_one(ADMIN)
+    deploy_part_two(ADMIN, token, voting_escrow)
 
 
 def deploy_part_one(admin, confs=1, deployments_json=None):
@@ -98,9 +104,14 @@ def deploy_part_two(admin, token, voting_escrow, confs=1, deployments_json=None)
     for name, weight in GAUGE_TYPES:
         gauge_controller.add_type(name, weight, {"from": admin, "required_confs": confs})
 
-    pool_proxy = PoolProxy.deploy({"from": admin, "required_confs": confs})
+    # pool_proxy = PoolProxy.deploy({"from": admin, "required_confs": confs}) # TODO: report error on github
+    pool_proxy = PoolProxy.deploy(admin, admin, admin, {"from": admin, "required_confs": confs})
     minter = Minter.deploy(token, gauge_controller, {"from": admin, "required_confs": confs})
     token.set_minter(minter, {"from": admin, "required_confs": confs})
+
+    # added base deployment so I can later pass fee distributor to MetaPoolFactry    
+    start_time = 1600300800 # 17 Sept 2020, just for mocking 
+    fee_distributor = FeeDistributor.deploy(voting_escrow, start_time, token, admin, admin, {"from": admin, "required_confs": confs})
 
     deployments = {
         "ERC20CRV": token.address,
@@ -110,9 +121,11 @@ def deploy_part_two(admin, token, voting_escrow, confs=1, deployments_json=None)
         "LiquidityGauge": {},
         "LiquidityGaugeReward": {},
         "PoolProxy": pool_proxy.address,
+        "FeeDistributor": fee_distributor.address
     }
     for name, (lp_token, weight) in POOL_TOKENS.items():
-        gauge = LiquidityGauge.deploy(lp_token, minter, {"from": admin, "required_confs": confs})
+        # gauge = LiquidityGauge.deploy(lp_token, minter, {"from": admin, "required_confs": confs}) # TODO: report error on github
+        gauge = LiquidityGauge.deploy(lp_token, minter, admin, {"from": admin, "required_confs": confs})
         gauge_controller.add_gauge(gauge, 0, weight, {"from": admin, "required_confs": confs})
         deployments["LiquidityGauge"][name] = gauge.address
 

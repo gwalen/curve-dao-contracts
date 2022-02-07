@@ -11,6 +11,7 @@ from web3.gas_strategies.time_based import fast_gas_price_strategy as gas_strate
 
 LP_VESTING_JSON = "scripts/early-users.json"
 DEPLOYMENTS_JSON = "deployments.json"
+DEPLOYMENTS_JSON_DEVELOP = "deployments_dev.json"
 REQUIRED_CONFIRMATIONS = 3
 
 # Aragon agent address - set after the Aragon DAO is deployed
